@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230055aa'/><text x='16' y='22' font-size='16' font-weight='bold' text-anchor='middle' fill='white'>Q</text></svg>">
+<title>QOSA 智能装柜规划器</title>
+<style>
+  :root {
+    --brand: #0055aa;
+    --brand-dark: #004080;
+    --brand-light: #e8f1fa;
+    --ok: #1a8f4d;
+    --warn: #c8871a;
+    --over: #c0392b;
+    --ink: #1c2733;
+    --ink-dim: #5b6b7c;
+    --line: #d8e0e8;
+    --bg: #f4f7fa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    color: var(--ink); background: var(--bg);
+    display: flex; flex-direction: column; min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(90deg, var(--brand), var(--brand-dark));
+    color: #fff; padding: 10px 20px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  header .logo {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: #fff; color: var(--brand);
+    display: grid; place-items: center;
+    font-weight: 800; font-size: 15px; letter-spacing: .5px;
+  }
+  header h1 { font-size: 17px; font-weight: 700; }
+  header .sub { font-size: 12px; opacity: .8; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #panel {
+    width: 460px; min-width: 340px; max-width: 100vw;
+    background: #fff; border-right: 1px solid var(--line);
+    overflow-y: auto; padding: 14px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  #stage { flex: 1; position: relative; min-width: 0; background: #eaf0f6; }
+  #gl { position: absolute; inset: 0; }
+  #gl canvas { display: block; }
+
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .card h2 { font-size: 13px; color: var(--brand-dark); margin-bottom: 10px; letter-spacing: 1px; }
+
+  label.fld { display: block; font-size: 12px; color: var(--ink-dim); margin-bottom: 4px; }
+  .ctype {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 9px; margin: 0 6px 6px 0; font-size: 12px; cursor: pointer;
+  }
+  .ctype input { accent-color: var(--brand); }
+  .ctype:has(input:checked) { border-color: var(--brand); background: var(--brand-light); }
+  #container-spec { font-size: 12px; color: var(--ink-dim); }
+
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th { text-align: left; color: var(--ink-dim); font-weight: 600; padding: 4px 4px; white-space: nowrap; }
+  td { padding: 3px 2px; }
+  td input { padding: 4px 4px; font-size: 12px; width: 100%;
+    border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
+  td input[type=number] { min-width: 48px; }
+  td input[type=text] { min-width: 64px; }
+  td input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--brand); }
+  td input:focus { outline: 2px solid var(--brand-light); border-color: var(--brand); }
+  #cargo-table tr.est input { background: #fdf6e3; } /* 体积估算行标黄，提示复核 */
+  .del-row {
+    border: none; background: none; color: var(--over); cursor: pointer;
+    font-size: 14px; padding: 2px 6px; border-radius: 4px;
+  }
+  .del-row:hover { background: #fdeceb; }
+
+  .btn {
+    border: none; border-radius: 7px; cursor: pointer;
+    font-size: 13px; padding: 8px 14px; font-weight: 600;
+    transition: filter .12s;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: .55; cursor: not-allowed; filter: none; }
+  .btn-primary { background: var(--brand); color: #fff; width: 100%; padding: 11px; font-size: 14px; }
+  .btn-ghost { background: var(--brand-light); color: var(--brand-dark); }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  #progress-wrap { display: none; }
+  #progress-wrap.on { display: block; }
+  .bar { height: 8px; border-radius: 4px; background: var(--brand-light); overflow: hidden; }
+  .bar > i {
+    display: block; height: 100%; width: 40%;
+    background: var(--brand); border-radius: 4px;
+    animation: slide 1.1s ease-in-out infinite alternate;
+  }
+  @keyframes slide { from { margin-left: 0; } to { margin-left: 60%; } }
+  #progress-text { font-size: 12px; color: var(--ink-dim); margin-top: 6px; }
+
+  #ctabs { display: none; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  #ctabs.on { display: flex; }
+  #ctabs .ctab {
+    border: 1px solid var(--line); border-radius: 7px; background: #fff;
+    padding: 6px 12px; font-size: 12px; cursor: pointer; color: var(--ink-dim);
+  }
+  #ctabs .ctab.active { border-color: var(--brand); background: var(--brand); color: #fff; font-weight: 600; }
+
+  .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 13px; }
+  .kv .k { color: var(--ink-dim); }
+  .kv .v { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .badge.ok { background: #e3f5ea; color: var(--ok); }
+  .badge.warn { background: #fdf2df; color: var(--warn); }
+  .badge.over { background: #fdeceb; color: var(--over); }
+
+  #checks li, #rejects li { font-size: 12px; margin: 4px 0 4px 16px; }
+  #summary h2 { display: flex; align-items: center; justify-content: space-between; }
+  #fleet-line { font-size: 12px; color: var(--ink-dim); margin-bottom: 8px; }
+
+  #toolbar {
+    position: absolute; top: 10px; left: 10px; z-index: 5;
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  #toolbar .btn { background: rgba(255,255,255,.92); color: var(--brand-dark); box-shadow: 0 1px 4px rgba(0,40,80,.18); font-size: 12px; padding: 6px 10px; }
+  #toolbar .btn.active { background: var(--brand); color: #fff; }
+
+  #legend {
+    position: absolute; bottom: 10px; left: 10px; z-index: 5;
+    background: rgba(255,255,255,.92); border-radius: 8px; padding: 8px 10px;
+    font-size: 12px; max-width: 46%; box-shadow: 0 1px 4px rgba(0,40,80,.18);
+    display: none;
+  }
+  #legend.on { display: block; }
+  #legend .li { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  #legend .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+
+  #tooltip {
+    position: absolute; z-index: 9; pointer-events: none; display: none;
+    background: rgba(16,32,48,.92); color: #fff; border-radius: 8px;
+    padding: 8px 10px; font-size: 12px; line-height: 1.6; white-space: nowrap;
+  }
+  #tooltip b { color: #9fc7ef; }
+
+  #empty-hint {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    color: var(--ink-dim); font-size: 14px; text-align: center; z-index: 4;
+    pointer-events: none; padding: 20px;
+  }
+
+  #print-report { display: none; }
+
+  @media (max-width: 860px) {
+    main { flex-direction: column; }
+    #panel { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--line); max-height: 52vh; }
+    #stage { min-height: 46vh; }
+  }
+
+  @media print {
+    body > header, body > main { display: none !important; }
+    #print-report {
+      display: block !important; color: #000; font-size: 12px;
+      padding: 0 4mm;
+    }
+    #print-report h1 { font-size: 18px; margin: 8px 0 2px; }
+    #print-report h2 { font-size: 14px; margin: 14px 0 6px; color: #0055aa; }
+    #print-report .pmeta { font-size: 11px; color: #555; margin-bottom: 8px; }
+    #print-report table { width: 100%; border-collapse: collapse; margin: 6px 0 12px; }
+    #print-report th, #print-report td {
+      border: 1px solid #999; padding: 3px 6px; font-size: 11px; text-align: left;
+    }
+    #print-report th { background: #e8f1fa; }
+    #print-report img { max-width: 100%; border: 1px solid #ccc; }
+    #print-report .csec { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Q</div>
+  <div>
+    <h1>QOSA 智能装柜规划器</h1>
+    <div class="sub">海运集装箱装载方案 · 数据不出浏览器</div>
+  </div>
+</header>
+
+<main>
+  <section id="panel">
+    <div class="card">
+      <h2>柜型（可多选，自动分柜）</h2>
+      <div id="container-list"></div>
+      <div id="container-spec"></div>
+    </div>
+
+    <div class="card">
+      <h2>货物清单</h2>
+      <div class="table-wrap">
+        <table id="cargo-table">
+          <thead>
+            <tr>
+              <th>名称</th><th>长m</th><th>宽m</th><th>高m</th><th>重kg</th><th>件数</th>
+              <th title="允许其他货压在上面">可叠</th>
+              <th title="顶面可承受的最大重量 kg，空=不限">顶压</th>
+              <th title="易碎品：上面不放货">易碎</th>
+              <th title="多收货人：数字小的先卸，靠柜门">卸序</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-ghost" id="add-row">＋ 加一行</button>
+        <button class="btn btn-ghost" id="load-sample">载入示例</button>
+        <button class="btn btn-ghost" id="clear-rows">清空</button>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn btn-ghost" id="import-btn">导入 Excel/CSV</button>
+        <button class="btn btn-ghost" id="tpl-btn">下载导入模板</button>
+        <input type="file" id="import-file" accept=".xlsx,.xls,.csv" style="display:none">
+      </div>
+      <div style="font-size:11px;color:var(--ink-dim);margin-top:6px;">
+        支持分开的 长/宽/高 列、合并「尺寸」列（如 400*800×100，自动识别 mm/cm/m），<br>
+        也可直接导入货代装箱单（含 打包數量/体积/重量 列），按体积自动折算并标黄待复核行
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="run">开始计算装载方案</button>
+
+    <div id="progress-wrap">
+      <div class="bar"><i></i></div>
+      <div id="progress-text">正在优化布局…</div>
+    </div>
+
+    <div class="card" id="summary" style="display:none;">
+      <h2>装载结果 <span id="sev-badge" class="badge ok"></span></h2>
+      <div id="fleet-line"></div>
+      <ul id="out-detail" style="display:none; margin:0 0 8px; padding-left:18px; font-size:12px; color:#b3261e;"></ul>
+      <div id="ctabs"></div>
+      <div class="kv" id="summary-kv"></div>
+      <div id="checks-wrap" style="margin-top:8px;">
+        <ul id="checks"></ul>
+      </div>
+      <div id="rejects-wrap" style="margin-top:6px; display:none;">
+        <h2 style="color:var(--over);">未装入</h2>
+        <ul id="rejects"></ul>
+      </div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-ghost" id="export-xlsx">导出装箱单 Excel</button>
+        <button class="btn btn-ghost" id="export-pdf">打印 / 存 PDF 报告</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="stage">
+    <div id="gl"></div>
+    <div id="toolbar">
+      <button class="btn" id="view-reset">重置视角</button>
+      <button class="btn" id="view-top">俯视</button>
+      <button class="btn" id="view-xray">X光透视</button>
+    </div>
+    <div id="legend"></div>
+    <div id="tooltip"></div>
+    <div id="empty-hint">录入货物后点击「开始计算装载方案」<br>这里将显示 3D 装载效果（拖动旋转 · 滚轮缩放 · 悬停查看单件）</div>
+  </section>
+</main>
+
+<div id="print-report"></div>
+
+<script src="./vendor/xlsx.full.min.js"></script>
+<script type="module" src="./ui/app.js"></script>
+</body>
+</html>
