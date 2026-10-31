@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 拉取两个大体积第三方库到 vendor/（发布通道限制未直接入库，此处固定版本+SHA256 校验）
+// 拉取大体积第三方库到 vendor/（发布通道限制未直接入库，此处固定版本+SHA256 校验）
 // 用法：node scripts/fetch-vendor.mjs
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
@@ -21,6 +21,14 @@ const FILES = [
     sha256: 'c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99',
     bytes: 881727,
   },
+  {
+    name: 'OrbitControls.js',
+    url: 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js',
+    sha256: '5a44a9e86a2a0fb11933eed69bc2cd33c76a496854c1aed6ed776efa87d7b064',
+    bytes: 29868,
+    // 上游从裸包名 'three' 导入，改写为相对路径指向 vendored three.module.js
+    transform: (s) => s.replace("from 'three'", "from './three.module.js'"),
+  },
 ];
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
@@ -30,9 +38,16 @@ for (const f of FILES) {
   const dest = join(VENDOR, f.name);
   try {
     const cur = statSync(dest);
-    if (cur.size === f.bytes && sha256(readFileSync(dest)) === f.sha256) {
-      console.log(`✓ ${f.name} 已存在且校验通过，跳过`);
-      continue;
+    if (cur.size > 0) {
+      // 已存在：对 transform 过的文件校验源哈希不可行，按目标文件是否生成即可
+      if (!f.transform && cur.size === f.bytes && sha256(readFileSync(dest)) === f.sha256) {
+        console.log(`✓ ${f.name} 已存在且校验通过，跳过`);
+        continue;
+      }
+      if (f.transform) {
+        console.log(`✓ ${f.name} 已存在，跳过（如需重装请删除后重跑）`);
+        continue;
+      }
     }
   } catch { /* 不存在则下载 */ }
   console.log(`下载 ${f.name} ← ${f.url}`);
@@ -41,7 +56,8 @@ for (const f of FILES) {
   const buf = Buffer.from(await res.arrayBuffer());
   if (buf.length !== f.bytes || sha256(buf) !== f.sha256)
     throw new Error(`${f.name} 校验失败：期望 sha256=${f.sha256}，实际 ${sha256(buf)}`);
-  writeFileSync(dest, buf);
-  console.log(`✓ ${f.name} 写入并校验通过（${f.bytes} 字节）`);
+  const out = f.transform ? Buffer.from(f.transform(buf.toString('utf8')), 'utf8') : buf;
+  writeFileSync(dest, out);
+  console.log(`✓ ${f.name} 写入并校验通过（源文件 ${f.bytes} 字节）`);
 }
 console.log('vendor 就绪');
